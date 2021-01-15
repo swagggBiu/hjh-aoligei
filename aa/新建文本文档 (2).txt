@@ -1,0 +1,219 @@
+<template>
+	<el-container>
+		<el-header>
+			<el-form :inline="true">
+				<el-form-item label="用户名：">
+					<el-input v-model="search.user_name" prefix-icon="el-icon-search" clearable
+					          placeholder="请输入用户名搜索" @change="userInit(true)"></el-input>
+				</el-form-item>
+				<el-form-item label="用户角色：">
+					<el-select v-model="search.role_id" @change="userInit(true)">
+						<el-option label="-全部-" :value="-1"></el-option>
+						<el-option label="-无角色-" :value="-0"></el-option>
+						<el-option v-for="role in roleList" :key="role.role_id"
+						           :label="role.role_name" :value="role.role_id"></el-option>
+					</el-select>
+				</el-form-item>
+				<el-form-item>
+					<el-button type="success" @click="beginAdd" icon="el-icon-plus">新增</el-button>
+				</el-form-item>
+			</el-form>
+		</el-header>
+		<el-main>
+			<el-table :data="userList" stripe border style="width: 100%;">
+				<el-table-column type="index" label="#" width="70" align="center"></el-table-column>
+				<el-table-column prop="user_name" label="姓名" width="120"></el-table-column>
+				<el-table-column prop="role" label="用户角色" width="200" align="center">
+					<template slot-scope="{ row }">
+						<span v-if="row.role_id !== null && roleList.length > 0"
+						      v-text="roleList.find(item => item.role_id === row.role_id).role_name"></span>
+						<span v-else class="no-role">无角色</span>
+					</template>
+				</el-table-column>
+				<el-table-column label="操作" fixed="right">
+					<template slot-scope="{ data }">
+						<el-button type="primary" @click="beginUpdate(data.$index)" size="mini" icon="el-icon-edit-outline">编辑</el-button>
+						<el-button type="danger"  size="mini" icon="el-icon-delete"
+						           @remove="remove(data.row.user_name)">删除
+						</el-button>
+						<el-button type="success" size="mini" icon="el-icon-setting"
+						:title="`${data.row.user_name}用户角色分配`"></el-button>
+					</template>
+				</el-table-column>
+			</el-table>
+		</el-main>
+		<el-footer>
+			<el-pagination layout="prev,pager,next,jumper,->,sizes,total"
+			               @size-change="userInit()"
+			               @current-change="userInit(false)"
+			               :page-size.sync="pagination.pageSize"
+			               :page-sizes="[4,6,8]"
+			               :current-page.sync="pagination.currentPage"
+			               :total="pagination.total" background></el-pagination>
+		</el-footer>
+		<el-dialog :visible.sync="edit.isEdit" :show-close="false" :modal="false" width="500px">
+			<h3 slot="title" v-text="`用户编辑-${edit.mode ? '新增' : '修改'}`"></h3>
+			<el-form label-width="80px">
+				<el-form-item label="用户名：">
+					<el-input v-model="edit.model.user_name"></el-input>
+				</el-form-item>
+				<el-form-item label="密码：">
+					<el-input v-model="edit.model.user_pwd"></el-input>
+				</el-form-item>
+			</el-form>
+			<span slot="footer">
+				<el-button type="primary">确定</el-button>
+				<el-button @click="edit.isEdit = false">取消</el-button>
+			</span>
+		</el-dialog>
+	</el-container>
+</template>
+
+<script type="text/ecmascript-6">
+        import {createNamespacedHelpers} from 'vuex';
+        let {mapState, mapActions} = createNamespacedHelpers("role");
+        //这个页面什么时候需要去请求新的用户数据？
+        //1. created的时候
+        //2. 搜索用户名input失去焦点（回车操作）
+        //3. 搜索中的el-select的change事件
+        //4. 分页控件“页码”改变时
+        //5. 分页控件的“页容量pageSize”改变时
+
+        export default {
+                name: "User",
+                data(){
+                        return {
+                                search: {//搜索查询时用到的
+                                        user_name: "",
+                                        role_id: -1
+                                },
+                                pagination: {//分页用到的
+                                        total: 0,//总共条数
+                                        pageSize: 6,//一页显示几条
+                                        currentPage: 1//当前看第几页
+                                },
+	                        edit: {
+//                                        isShow: false,//显示dialog
+                                        isEdit: false,
+		                        mode: true,
+		                        model: {user_name: "", user_pwd: "", role_id: null}
+	                        },
+                                userList: [//接收ajax返回的数据，list+total
+//		                        { id: 1, name: "张三", role: "学生" }
+                                ],
+                        }
+                },
+                created(){//这两个要同时发出 所以不需要写async await
+                        this.roleInit();
+                        this.userInit();
+                },
+                computed: {
+                        ...mapState({"roleList": "list"}),//给list起别名用大括号
+                },
+                methods: {
+                        ...mapActions({"roleInit": "init"}),
+                        //获取列表的封装函数
+                        async userInit(fromPage1 = true){
+                                //判断是否需要从第一页开始看
+	                        if(fromPage1) this.pagination.currentPage = 1;
+                                let {list, total} = await this.$http({
+                                        url: "/user/list",
+                                        method: "post",
+                                        data: {
+                                                ...this.search,
+                                                begin: this.pagination.pageSize * (this.pagination.currentPage - 1),
+                                                pageSize: this.pagination.pageSizes
+                                        }
+                                });
+                                this.userList = list;
+                                this.pagination.userTotal = total;
+                        },
+//                        searchChangeHandler(){//搜索改变时
+//                                this.pagination.currentPage = 1;//从第一页开始
+//                                this.getUser();
+//                        },
+//                        sizeChangeHandler(val){//每页几条改变时
+//                                this.pagination.currentPage = 1;//从第一页开始
+//                                this.getUser();
+//                        },
+//                        currentChangeHandler(val){//当前页
+//                                this.getUser();
+//                        },
+                        remove(user_name){
+                                this.$confirm(`你确定要删除"${user_name}"节点吗？`, "警告", {type: "warning"})
+                                        .then(async() =>{
+                                                await this.$http({
+                                                        url: "/user/remove/" + user_name,
+                                                        method: "post"
+                                                });
+                                                let i = this.userList.findIndex(item => item.user_name = user_name);
+                                                this.userList.splice(i, 1)
+                                                this.$message({
+                                                        message: `用户"${user_name}"删除成功！`,
+                                                        type: "success"
+                                                });
+                                        })
+                                        .catch(() =>{
+                                        })
+                        },
+	                beginAdd() {
+
+	                },
+	                beginUpdate() {},
+	                async save() {
+                                if(this.edit.mode) {
+                                        if(this.userNameValidateResult === false) return;
+                                        if(typeof this.userNameValidateResult === "undefined") {
+                                                await new Promise(resolve => this.$refs.form.validateFieId("user_name", message => {
+                                                        if(message === "") resolve();
+                                                }));
+                                        }
+					await this.$http({
+						method: "post",
+						url: "/user/add",
+						data: this.edit.model
+					});
+					this.userList.push(Object.assign({}, this.edit.model));
+					this.$message({ message: "新增成功！", type: "success" });
+                                } else {
+                                        await this.$http({
+                                                method: "post",
+                                                url: "/user/change_pwd",
+                                                data: this.edit.model
+                                        });
+                                        let i = this.userList.findIndex(item => item.user_name === this.edit.model.user_name);
+                                        this.userList.splice(i, 1, Object.assign({}, this.edit.model));
+                                        this.$message({ message: "修改成功！", type: "success" });
+                                }
+                                this.edit.isEdit = false;
+	                },
+	                beginRoleFuncConfig(user) {
+                                this.edit.model.user_name = user.user_name;
+                                let target = this.userL
+	                }
+                }
+        };
+</script>
+
+<style scoped>
+	.el-container {
+		position: absolute;
+		left: 0;
+		top: 0;
+		width: 100%;
+		height: 100%;
+	}
+	
+	.el-main span.no-role{
+		color: #b0b0b0;
+	}
+
+	.el-footer {
+		display: flex;
+		align-items: center;
+	}
+
+	.el-pagination {
+		flex-grow: 1;
+	}
+</style>
